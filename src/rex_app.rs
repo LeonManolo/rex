@@ -1,23 +1,34 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use regex::Regex;
 
 pub struct RexApp {
     routes: HashMap<String, fn(u16, u16) -> ()>,
+    routes2: Vec<Route>,
+}
+
+type RouteCallback = fn(request: u16,response: u16) -> ();
+
+struct Route {
+    path: str,
+    path_regex: Regex,
+    callback: RouteCallback,
 }
 
 impl RexApp {
     pub fn new() -> Self {
         Self {
             routes: HashMap::new(),
+            routes2: vec![],
         }
     }
 
-    pub fn get(&mut self, path: String, function: fn(u16, u16) -> ()) {
+    pub fn get(&mut self, path: String, function: RouteCallback) {
         self.routes.insert(path, function);
     }
 
-    pub fn post(&mut self, path: String, function: fn(u16, u16) -> ()) {
+    pub fn post(&mut self, path: String, function: RouteCallback) {
         self.routes.insert(path, function);
     }
 
