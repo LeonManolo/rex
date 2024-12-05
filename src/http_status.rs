@@ -1,3 +1,5 @@
+
+#[derive(Copy, Clone)]
 pub enum HttpStatus {
     Ok = 200,
     Created = 201,
@@ -5,7 +7,7 @@ pub enum HttpStatus {
 }
 
 impl HttpStatus {
-    fn text(&self) -> String {
+    pub fn text(&self) -> String {
         match self {
             HttpStatus::Ok => {
                 String::from("OK")

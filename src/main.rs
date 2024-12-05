@@ -2,6 +2,7 @@ mod rex_app;
 mod response;
 mod headers;
 mod http_status;
+mod http_method;
 
 use rex_app::RexApp;
 
@@ -17,38 +18,36 @@ struct RouteSegment {
 
 fn main() {
     let re = Regex::new(r"^/users2/(?<otherId>[^/]+)$").unwrap();
-    let url = String::from("/users/123/");
+    let url = String::from("/users/:id/abc");
 
-    //let url_segments = url.split("/");
+    // let url_segments = url.split("/");
 
     // for url_segment in url_segments {
     //     println!("{}", url_segment);
     // }
 
-    re.is_match(&url);
+
     if let Some(captures) = re.captures(&url) {
         if let Some(id) = captures.name("id") {
             println!("{}", id.as_str());
         }
     }
 
-
-
     let mut app = RexApp::new();
     let port = 8080;
 
-    app.get("/hallo-welt".parse().unwrap(), |request, response| {
+    app.get(r"^/users/(?<otherId>[^/]+)$".parse().unwrap(), |request, response| {
         // in der datenbank
-        println!("HALLO VON HALLO WELT")
+        println!("HALLO VON USER")
     });
 
-    app.get("/hey".parse().unwrap(), |request, response| {
+    app.get(r"^/users2/(?<otherId>[^/]+)$".parse().unwrap(), |request, response| {
         // in der datenbank
-        println!("HALLO VON HEY")
+        println!("HALLO VON USERS2")
 
     });
 
-    app.get("/users2/:otherId".parse().unwrap(), |request, response| {
+    app.get("/users2/:idBla".parse().unwrap(), |request, response| {
         // in der datenbank
         println!("HALLO VON HEY")
 
