@@ -31,11 +31,8 @@ impl RexApp {
         self.push_route("POST", path, function);
     }
 
-
-
     fn push_route(&mut self,method: &str, path: String, function: RouteCallback) {
-
-        // TODO: convert string to regex representation
+        let path = RexApp::prepare_path_regex(path);
 
         let route = Route {
             method: method.to_string(),
@@ -45,6 +42,24 @@ impl RexApp {
             callback: function,
         };
         self.routes.push(route);
+    }
+
+    fn prepare_path_regex(path: String) -> String {
+        let mut regrex_string = String::from("^");
+
+        let url_segments = path.split("/");
+
+        for url_segment in url_segments {
+            if url_segment.contains(":") {
+                let value = url_segment.trim_start_matches(':');
+                regrex_string.push_str(&format!("/(?<{}>[^/]+)", value));
+            } else if !url_segment.is_empty() {
+                regrex_string.push_str(&format!("/{}", url_segment));
+            }
+        }
+
+        regrex_string.push_str("$");
+        regrex_string
     }
 
     fn find_matching_route(&self, path: &str, method: &str) -> Option<&Route> {
