@@ -1,10 +1,10 @@
+use crate::http_request_decoder::HttpRequest;
 use crate::request::Request;
 use crate::response::Response;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use crate::http_status::HttpStatus;
 
 pub struct RexApp {
     routes: Vec<Route>,
@@ -34,6 +34,12 @@ impl RexApp {
         self.push_route("POST", path, function);
     }
 
+    pub fn delete(&mut self, path: &str, function: RouteCallback) {
+        self.push_route("DELETE", path, function);
+    }
+
+    // TODO: other http methods here
+
     fn push_route(&mut self, method: &str, path: &str, function: RouteCallback) {
         let regex_path = RexApp::prepare_path_regex(path);
         let regex = Regex::new(&regex_path.to_string()).expect("Valid regex required!");
@@ -46,7 +52,6 @@ impl RexApp {
             }
         }
 
-
         let route = Route {
             method: method.to_string(),
             path: path.to_string(),
@@ -54,6 +59,7 @@ impl RexApp {
             callback: function,
             params: params,
         };
+
         self.routes.push(route);
     }
 
@@ -75,9 +81,9 @@ impl RexApp {
         regex_string
     }
 
-    fn find_matching_route(&self, path: &str, method: &str) -> Option<&Route> {
+    fn find_matching_route(&self, url: &str, method: &str) -> Option<&Route> {
         for route in self.routes.iter() {
-            if route.path_regex.is_match(path) && route.method == method {
+            if route.path_regex.is_match(url) && route.method == method {
                 return Some(&route);
             }
         }
@@ -106,14 +112,14 @@ impl RexApp {
         query_params
     }
 
-    fn extract_params_from_url(url: &String, route: &Route) -> HashMap<String, String> {
+    fn extract_params_from_url(url: &str, route: &Route) -> Vec<(String, String)> {
         let (leading_path, _) = url.split_once("?").unwrap_or((url, ""));
-        let mut params = HashMap::new();
+        let mut params: Vec<(String, String)> = vec![];
 
         if let Some(captures) = route.path_regex.captures(leading_path) {
             for param_key in route.params.clone() {
                 if let Some(capture) = captures.name(&*param_key) {
-                    params.insert(param_key.to_string(), capture.as_str().to_string());
+                    params.push((param_key.to_string(), capture.as_str().to_string()));
                 }
             }
         }
@@ -121,22 +127,11 @@ impl RexApp {
         params
     }
 
-    fn extract_body(http_string: &str) -> &str {
-        let parts: Vec<&str> = http_string.split("\r\n\r\n").collect();
-        if parts.len() > 1 {
-            let body = parts[1]; // Der Body ist alles nach \r\n\r\n
-            println!("Body: {}", body);
-            body
-        } else {
-            println!("Kein Body gefunden.");
-            ""
-        }
-    }
-
     pub fn listen(&self, port: u16, function: fn() -> ()) {
         let address = format!("127.0.0.1:{}", port);
         let listener = TcpListener::bind(address).unwrap();
 
+        function();
         for stream in listener.incoming() {
             // TODO: adding multithreading here
             let mut stream = stream.unwrap();
@@ -144,60 +139,37 @@ impl RexApp {
             let mut buffer = [0; 1024]; // Buffer für die eingehende Anfrage
 
             // Lese die Anfrage aus dem Stream
-            stream.read(&mut buffer).unwrap();
+            stream.read(&mut buffer).unwrap(); // todo error
 
-            // Konvertiere den Buffer zu einem String
-            let utf8_request = String::from_utf8_lossy(&buffer);
+            let mut response: Response;
 
-            // Extrahiere die erste Zeile (enthält Methode, Route und HTTP-Version)
-            let first_line = utf8_request.lines().next().unwrap_or(""); // TODO: ERROR Handling
-            println!("first line: {}", first_line);
-
-            let response = Response::default();
-
-            // Zerlege die erste Zeile in Bestandteile
-            let parts: Vec<&str> = first_line.split_whitespace().collect();
-            if parts.len() > 1 {
-                let path = parts[1];
-                println!("Path: {}", path);
-
-                if let Some(route) = self.find_matching_route(path, parts[0]) {
+            if let Some(http_request) = HttpRequest::decode_from_buffer(buffer) {
+                if let Some(route) =
+                    self.find_matching_route(&http_request.url, &http_request.method)
+                {
                     let request = Request {
-                        http_version: parts[2].to_string(),
-                        headers: HashMap::new(),
-                        params: Self::extract_params_from_url(&path.to_string(), route),
-                        query_params: Self::extract_query_params_from_url(path),
-                        body: Self::extract_body(&utf8_request).to_string(),
+                        method: http_request.method,
+                        url: http_request.url.clone(),
+                        http_version: http_request.version,
+                        headers: http_request.headers,
+                        params: Self::extract_params_from_url(&http_request.url, route),
+                        query_params: http_request.url_query_params,
+                        body: http_request.body,
                     };
 
-                    let mut response = Response::default();
+                    response = Response::default();
                     let callback = route.callback;
                     callback(request, &mut response);
-
-                    let raw_response = response.to_raw_http_response();
-                    stream.write_all(raw_response.as_bytes()).unwrap();
-                    stream.flush().unwrap();
                 } else {
-                    /// 404 not found
-                    let response = Response {
-                        http_version: String::from("HTTP/1.1"),
-                        http_status: HttpStatus::NotFound,
-                        headers: HashMap::new(),
-                        body: Self::extract_body(&utf8_request).to_string(),
-                    };
-                    let raw_response = response.to_raw_http_response();
-                    stream.write_all(raw_response.as_bytes()).unwrap();
-                    stream.flush().unwrap();
+                    response = Response::not_found();
                 }
+            } else {
+                response = Response::error();
             }
 
-            // Sende eine Antwort
-            //let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-            // let raw_response = response.to_raw_http_response();
-            // stream.write_all(raw_response.as_bytes()).unwrap();
-            // stream.flush().unwrap();
+            let raw_response = response.to_raw_http_response();
+            stream.write_all(raw_response.as_bytes()).unwrap();
+            stream.flush().unwrap();
         }
-
-        function();
     }
 }

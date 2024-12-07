@@ -1,7 +1,6 @@
 use crate::http_status::HttpStatus;
 use std::any::Any;
 use std::collections::HashMap;
-use std::fmt::format;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -19,6 +18,25 @@ impl Response {
         Self {
             http_version: String::from("HTTP/1.1"),
             http_status: HttpStatus::Ok,
+            headers: HashMap::from([(String::from("content-length"), String::from("0"))]),
+            body: String::new(),
+        }
+    }
+
+    pub fn error() -> Self {
+        let body = String::from("Internal error");
+        Self {
+            http_version: String::from("HTTP/1.1"),
+            http_status: HttpStatus::InternalServerError,
+            headers: HashMap::from([(String::from("content-length"), body.len().to_string())]),
+            body,
+        }
+    }
+
+    pub fn not_found() -> Self {
+        Self {
+            http_version: String::from("HTTP/1.1"),
+            http_status: HttpStatus::NotFound,
             headers: HashMap::from([(String::from("content-length"), String::from("0"))]),
             body: String::new(),
         }
@@ -58,8 +76,10 @@ impl Response {
     ///
     pub fn send_json_from_trait<T: ToJson>(&mut self, body: T) {
         self.body = body.to_json_string();
-        self.headers
-            .insert(String::from("content-type"), String::from("application/json"));
+        self.headers.insert(
+            String::from("content-type"),
+            String::from("application/json"),
+        );
 
         self.headers
             .insert(String::from("content-length"), self.body.len().to_string());
@@ -78,7 +98,7 @@ impl Response {
     // type safety umgehen
     pub fn json_from_map<K, V>(&mut self, body: &HashMap<String, Box<dyn Any>>) {}
 
-    pub fn send(&mut self, text: &str) {
+    pub fn send_text(&mut self, text: &str) {
         self.body = text.to_string();
         self.headers
             .insert(String::from("content-type"), String::from("text/plain"));
@@ -87,11 +107,13 @@ impl Response {
             .insert(String::from("content-length"), text.len().to_string());
     }
 
-    pub fn send_status(&mut self) {}
+    pub fn send_status(&mut self) {
+        // todo
+    }
 
-    pub fn set_header(&mut self, name: String, value: String) {
+    pub fn set_header(&mut self, name: &str, value: &str) {
         // lowercase to prevent duplicate headers!
-        self.headers.insert(name.to_lowercase(), value);
+        self.headers.insert(name.to_lowercase(), value.to_string());
     }
 
     pub fn set_headers(&mut self, headers: HashMap<String, String>) {
