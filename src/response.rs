@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::fmt::format;
 
 pub struct Response {
-    http_version: String,
-    http_status: HttpStatus,
-    headers: HashMap<String, String>,
-    body: String, // leerer string wenn kein body (json wird zu einem string konvertiert)
+    pub(crate) http_version: String,
+    pub(crate) http_status: HttpStatus,
+    pub(crate) headers: HashMap<String, String>,
+    pub(crate) body: String, // leerer string wenn kein body (json wird zu einem string konvertiert)
 }
 
 pub trait ToJson {
@@ -50,10 +50,16 @@ impl Response {
         // "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_string()
     }
 
+    /// Serializes the given object to JSON and sets it as the HTTP response body.
+    /// Also updates the `Content-Type` and `Content-Length` headers.
+    ///
+    /// # Parameters
+    /// - `body`: An object implementing the `ToJson` trait, to be serialized into JSON.
+    ///
     pub fn send_json_from_trait<T: ToJson>(&mut self, body: T) {
         self.body = body.to_json_string();
         self.headers
-            .insert(String::from("content-type"), String::from("text/plain"));
+            .insert(String::from("content-type"), String::from("application/json"));
 
         self.headers
             .insert(String::from("content-length"), self.body.len().to_string());

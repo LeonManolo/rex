@@ -16,8 +16,9 @@ impl HttpStatus {
                 String::from("CREATED")
             }
             HttpStatus::NotFound => {
-                String::from("SOMETHING")
+                String::from("NOT FOUND")
             }
+            //TODO: some more
         }
     }
 }

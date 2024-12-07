@@ -1,81 +1,89 @@
-mod rex_app;
-mod response;
 mod headers;
 mod http_status;
 mod request;
+mod response;
+mod rex_app;
 
-use rex_app::RexApp;
-use std::collections::HashMap;
-
+use crate::request::FromJson;
 use regex::Regex;
+use rex_app::RexApp;
 use std::io::Write;
-use std::net::TcpListener;
+use crate::response::ToJson;
 
-struct RouteSegment {
-    path: String,
+/// Example response json
+struct MyCustomJsonRequestBodyDto {
+    my_prop: String,
+    my_other_prop: String,
 }
-
-fn extract_params_from_url(url: &String) -> HashMap<String, String> {
-    let param_keys = vec!["otherId"];
-    let re = Regex::new(r"^/users2/(?<otherId>[^/]+)$").unwrap();
-    let mut params = HashMap::new();
-
-    if let Some(captures) = re.captures(url) {
-        for param_key in param_keys {
-            if let Some(capture) = captures.name(param_key) {
-                params.insert(param_key.to_string(), capture.as_str().to_string());
-            }
+impl FromJson for MyCustomJsonRequestBodyDto {
+    fn from_json_string(json_string: String) -> Self {
+        // custom conversion logic here
+        MyCustomJsonRequestBodyDto {
+            my_prop: "".to_string(),
+            my_other_prop: "".to_string(),
         }
     }
-
-    params
 }
 
-fn prepare_path_regex(path: String) -> String {
-    let mut regrex_string = String::from("^");
+/// Example request json
+struct MyCustomJsonResponseBodyDto {
+    test_prop: String,
+    some_number: i32,
+}
 
-    let url_segments = path.split("/");
-
-    for url_segment in url_segments {
-        if url_segment.contains(":") {
-            let value = url_segment.trim_start_matches(':');
-            regrex_string.push_str(&format!("/(?<{}>[^/]+)", value));
-        } else if !url_segment.is_empty() {
-            regrex_string.push_str(&format!("/{}", url_segment));
-        }
+impl ToJson for MyCustomJsonResponseBodyDto {
+    fn to_json_string(&self) -> String {
+        // custom conversion logic
+        format!(
+            r#"{{"test_prop":"{}","some_number":{}}}"#,
+            self.test_prop,
+            self.some_number,
+        )
     }
-
-    regrex_string.push_str("$");
-    regrex_string
 }
 
 fn main() {
-
-    println!(r"{}", prepare_path_regex(String::from("/users")));
-
-    // for pair in extract_params_from_url(&String::from("/users2/123")) {
-    //     println!("key: {}, value: {}", pair.0,pair.1);
-    // }
-
-
     let mut app = RexApp::new();
     let port = 8080;
 
-    app.get(r"^/users/(?<otherId>[^/]+)".parse().unwrap(), |request, response| {
+    app.get("/users/:id", |request, response| {
         // in der datenbank
-        println!("HALLO VON USER")
+        println!("HALLO VON USER");
+        println!("body: {}", response.body);
+
+        // 127.0.0.1:8080/users/111?myparam=hallo&myotherparam=3
+        // query params can be any name! Query params values are always a string and have to be converted to other types e.g. integer,...
+        let my_custom_query_param = request.query_params.get("myparam");
+        let my_custom_query_param2 = request.query_params.get("myotherparam");
+
+        let id = request.param(String::from("id"));
+
+        let response_text = format!(
+            "My awesome body! myparam: {} and myotherparam: {} and my param path param id is = {}",
+            my_custom_query_param.unwrap_or(&String::new()),
+            my_custom_query_param2.unwrap_or(&String::new()),
+            id.unwrap_or(String::new()),
+        );
+
+        // return response.send(response_text.as_str());
+
+        // or use custom json helper method
+        let response_json = MyCustomJsonResponseBodyDto {
+            test_prop: "THIS IS MY CUSTOM PROP".to_string(),
+            some_number: 42,
+        };
+        return response.send_json_from_trait(response_json);
     });
 
-    app.get(r"/users2/:idKeineAhnung".parse().unwrap(), |request, response| {
+    app.get("/users2/:idKeineAhnung", |request, response| {
         // in der datenbank
-        println!("HALLO VON USERS2")
-
+        println!("HALLO VON USERS2");
+        return response.send("HALLO WELT VON /users2 mit");
     });
 
-    app.get("/users2/:idBla".parse().unwrap(), |request, response| {
+    app.get("/users/:id/hallo", |request, response| {
         // in der datenbank
-        println!("HALLO VON HEY")
-
+        println!("HALLO VON :id Hallo");
     });
 
     app.listen(port, || {
