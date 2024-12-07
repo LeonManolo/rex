@@ -1,19 +1,23 @@
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use regex::Regex;
+use crate::request::Request;
 use crate::response::Response;
 
 pub struct RexApp {
     routes: Vec<Route>,
 }
 
-type RouteCallback = fn(request: u16,response: u16) -> ();
+type RouteCallback = fn(request: Request, response: &mut Response) -> ();
 
 struct Route {
     method: String,
     path: String,
     path_regex: Regex,
     callback: RouteCallback,
+    /// order is important!
+    params: Vec<String>, // todo: delete?
 }
 
 impl RexApp {
@@ -36,13 +40,22 @@ impl RexApp {
     fn push_route(&mut self,method: &str, path: String, function: RouteCallback) {
 
         // TODO: convert string to regex representation
+        let regex = Regex::new(path.as_str()).unwrap();
+
+        let mut params = vec![];
+        for regex_group_name in regex.capture_names() {
+            if let Some(group_name) = regex_group_name {
+                params.push(group_name.to_string());
+            }
+        }
 
         let route = Route {
             method: method.to_string(),
             path: path.clone(), // TODO: clone entfernen
             // TODO: Zum testen ist der path einfach direkt ein regex
-            path_regex: Regex::new(path.as_str()).unwrap(), // TODO: unsafe unwrap!
+            path_regex: regex, // TODO: unsafe unwrap!
             callback: function,
+            params: params,
         };
         self.routes.push(route);
     }
@@ -56,6 +69,28 @@ impl RexApp {
 
         None
     }
+
+    fn extract_query_params_from_url(url: &str) -> HashMap<String, String> {
+        /// splits url (https://example.com/abc?param=value into https://example.com/abc and param=value)
+        let mut query_params = HashMap::new();
+        match url.split_once("?") {
+            Some((_, raw_query_params)) => {
+                let params = raw_query_params.split("&");
+                for param in params {
+                    match param.split_once("=") {
+                        Some((key, value)) if key.len() > 0 && value.len() > 0 => {
+                            query_params.insert(key.to_string(), value.to_string());
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            None => (),
+        }
+        query_params
+    }
+
+
 
 
     pub fn listen(&self, port: u16, function: fn() -> ()) {
@@ -83,7 +118,8 @@ impl RexApp {
             // Zerlege die erste Zeile in Bestandteile
             let parts: Vec<&str> = first_line.split_whitespace().collect();
             if parts.len() > 1 {
-                let route = parts[1]; // Der zweite Teil ist die Route
+                let path = parts[1];
+                let route = path; // Der zweite Teil ist die Route
                 println!("Route: {}", route);
 
 
@@ -91,11 +127,24 @@ impl RexApp {
 
 
                 if let Some(route) = self.find_matching_route(route, parts[0]) {
+                    let request = Request {
+                        http_version: parts[2].to_string(),
+                        headers: HashMap::new(),
+                        params: HashMap::new(),
+                        query_params: Self::extract_query_params_from_url(path),
+                        body: String::new(),
+                    };
+
+                    let mut response = Response::default();
                     let callback = route.callback;
-                    callback(1,2);
+                    callback(request, &mut response);
+
+                    let raw_response = response.to_raw_http_response();
+                    stream.write_all(raw_response.as_bytes()).unwrap();
+                    stream.flush().unwrap();
 
                 } else {
-                    // TODO: fehler
+                    // TODO: handle route not found 404
                 }
 
 
@@ -103,9 +152,9 @@ impl RexApp {
 
             // Sende eine Antwort
             //let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-            let raw_response = response.to_raw_http_response();
-            stream.write_all(raw_response.as_bytes()).unwrap();
-            stream.flush().unwrap();
+            // let raw_response = response.to_raw_http_response();
+            // stream.write_all(raw_response.as_bytes()).unwrap();
+            // stream.flush().unwrap();
         }
 
         function();

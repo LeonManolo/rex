@@ -28,8 +28,7 @@ impl Response {
         let mut headers_as_string = String::new();
 
         for header in self.headers.iter() {
-
-            headers_as_string.push_str(&format!(r"{}: {}\r\n\", header.0, header.1));
+            headers_as_string.push_str(&format!("{}: {}\r\n", header.0, header.1));
         }
 
         headers_as_string
@@ -37,24 +36,21 @@ impl Response {
 
     pub fn to_raw_http_response(&self) -> String {
         let http_status_code = self.http_status as u16;
-
-        println!("{}", format!(
-            r"{} {} {}\r\n\{}\r\n\{}",
+        let http_response_string = format!(
+            "{} {} {}\r\n{}\r\n{}",
             self.http_version,
             http_status_code.to_string(),
             self.http_status.text(),
             self.headers_to_string(),
             self.body,
-        ));
+        );
 
-        "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_string()
+        //println!("{}", http_response_string);
+        http_response_string
+        // "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_string()
     }
 
-    pub fn json_from_trait<T: ToJson>(&mut self, body: T) {
-        self.body = body.to_json_string();
-    }
-
-    pub fn json_from_trait_array<T: ToJson>(&mut self, body: T) {
+    pub fn send_json_from_trait<T: ToJson>(&mut self, body: T) {
         self.body = body.to_json_string();
         self.headers
             .insert(String::from("content-type"), String::from("text/plain"));
@@ -63,10 +59,21 @@ impl Response {
             .insert(String::from("content-length"), self.body.len().to_string());
     }
 
+    // pub fn send_json_from_trait_array<T: ToJson>(&mut self, body: T) {
+    //     self.body = body.to_json_string();
+    //     // for loop here
+    //     self.headers
+    //         .insert(String::from("content-type"), String::from("text/plain"));
+    //
+    //     self.headers
+    //         .insert(String::from("content-length"), self.body.len().to_string());
+    // }
+
     // type safety umgehen
     pub fn json_from_map<K, V>(&mut self, body: &HashMap<String, Box<dyn Any>>) {}
 
-    pub fn send(&mut self, text: String) {
+    pub fn send(&mut self, text: &str) {
+        self.body = text.to_string();
         self.headers
             .insert(String::from("content-type"), String::from("text/plain"));
 
