@@ -17,7 +17,7 @@ struct Route {
     path: String,
     path_regex: Regex,
     callback: RouteCallback,
-    /// order is important!
+    // order is important!
     params: Vec<String>,
 }
 
@@ -47,6 +47,12 @@ impl RexApp {
 
         let mut params = vec![];
         for regex_group_name in regex.capture_names() {
+            // if regex_group_name != None {
+            //     let group_name = regex_group_name.unwrap();
+            // }
+
+            // Äquivalent!
+
             if let Some(group_name) = regex_group_name {
                 params.push(group_name.to_string());
             }
@@ -91,27 +97,6 @@ impl RexApp {
         None
     }
 
-    // "Query params" and "params" are not the same!
-    fn extract_query_params_from_url(url: &str) -> HashMap<String, String> {
-        /// splits url (https://example.com/abc?param=value into https://example.com/abc and param=value)
-        let mut query_params = HashMap::new();
-        match url.split_once("?") {
-            Some((_, raw_query_params)) => {
-                let params = raw_query_params.split("&");
-                for param in params {
-                    match param.split_once("=") {
-                        Some((key, value)) if key.len() > 0 && value.len() > 0 => {
-                            query_params.insert(key.to_string(), value.to_string());
-                        }
-                        _ => (),
-                    }
-                }
-            }
-            None => (),
-        }
-        query_params
-    }
-
     fn extract_params_from_url(url: &str, route: &Route) -> Vec<(String, String)> {
         let (leading_path, _) = url.split_once("?").unwrap_or((url, ""));
         let mut params: Vec<(String, String)> = vec![];
@@ -127,49 +112,67 @@ impl RexApp {
         params
     }
 
-    pub fn listen(&self, port: u16, function: fn() -> ()) {
+    pub fn listen(self, port: u16, function: fn() -> ())
+    {
         let address = format!("127.0.0.1:{}", port);
         let listener = TcpListener::bind(address).unwrap();
 
         function();
+
+        let shared_self = std::sync::Arc::new(self);
+
         for stream in listener.incoming() {
-            // TODO: adding multithreading here
-            let mut stream = stream.unwrap();
-            // TODO: lernen wie man den buffer am besten setzt
-            let mut buffer = [0; 1024]; // Buffer für die eingehende Anfrage
+            match stream {
+                Ok(mut stream) => {
+                    // TODO: auskommentieren
+                    let shared_self = std::sync::Arc::clone(&shared_self);
 
-            // Lese die Anfrage aus dem Stream
-            stream.read(&mut buffer).unwrap(); // todo error
+                    std::thread::spawn(move || {
+                        let mut buffer = [0; 1024]; // TODO: vlt ändern
+                        if let Err(e) = stream.read(&mut buffer) {
+                            eprintln!("Failed to read from stream: {}", e);
+                            return;
+                        }
 
-            let mut response: Response;
+                        let mut response: Response;
 
-            if let Some(http_request) = HttpRequest::decode_from_buffer(buffer) {
-                if let Some(route) =
-                    self.find_matching_route(&http_request.url, &http_request.method)
-                {
-                    let request = Request {
-                        method: http_request.method,
-                        url: http_request.url.clone(),
-                        http_version: http_request.version,
-                        headers: http_request.headers,
-                        params: Self::extract_params_from_url(&http_request.url, route),
-                        query_params: http_request.url_query_params,
-                        body: http_request.body,
-                    };
+                        if let Some(http_request) = HttpRequest::decode_from_buffer(buffer) {
+                            if let Some(route) =
+                                shared_self.find_matching_route(&http_request.url, &http_request.method)
+                            {
+                                let request = Request {
+                                    method: http_request.method,
+                                    url: http_request.url.clone(),
+                                    http_version: http_request.version,
+                                    headers: http_request.headers,
+                                    params: Self::extract_params_from_url(&http_request.url, route),
+                                    query_params: http_request.url_query_params,
+                                    body: http_request.body,
+                                };
 
-                    response = Response::default();
-                    let callback = route.callback;
-                    callback(request, &mut response);
-                } else {
-                    response = Response::not_found();
+                                response = Response::default();
+                                let callback = route.callback;
+                                callback(request, &mut response);
+                            } else {
+                                response = Response::not_found();
+                            }
+                        } else {
+                            response = Response::error();
+                        }
+
+                        let raw_response = response.to_raw_http_response();
+                        if let Err(e) = stream.write_all(raw_response.as_bytes()) {
+                            eprintln!("Failed to write to stream: {}", e);
+                        }
+                        if let Err(e) = stream.flush() {
+                            eprintln!("Failed to flush stream: {}", e);
+                        }
+                    });
                 }
-            } else {
-                response = Response::error();
+                Err(e) => eprintln!("Failed to accept connection: {}", e),
             }
-
-            let raw_response = response.to_raw_http_response();
-            stream.write_all(raw_response.as_bytes()).unwrap();
-            stream.flush().unwrap();
         }
     }
+
+
 }

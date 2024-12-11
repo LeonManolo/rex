@@ -9,6 +9,7 @@ use crate::request::FromJson;
 use crate::response::ToJson;
 use rex_app::RexApp;
 use std::io::Write;
+use std::{thread, time};
 
 /// Example response json
 struct MyCustomJsonRequestBodyDto {
@@ -46,8 +47,11 @@ fn main() {
     let port = 8080;
 
     app.get("/users/:id", |request, response| {
-        // in der datenbank
-        println!("HALLO VON USER");
+        let delay = time::Duration::from_secs(25);
+        thread::sleep(delay);
+
+
+        println!("Hallo von /users/:id");
         println!("body: {}", request.body);
 
         // 127.0.0.1:8080/users/111?myparam=hallo&myotherparam=3
@@ -58,6 +62,7 @@ fn main() {
         let id = request.param("id");
 
         response.set_header("my-custom-header", "custom-header-value");
+
 
         let response_text = format!(
             "My awesome body! myparam: {} and myotherparam: {} and my param path param id is = {}",
@@ -76,15 +81,14 @@ fn main() {
         return response.send_json_from_trait(response_json);
     });
 
-    app.get("/users2/:idKeineAhnung", |request, response| {
-        // in der datenbank
-        println!("HALLO VON USERS2");
-        return response.send_text("HALLO WELT VON /users2 mit");
-    });
+    app.post("/courses/:id", |request, response| {
+        // let delay = time::Duration::from_secs(8);
+        // thread::sleep(delay);
 
-    app.get("/users/:id/hallo", |request, response| {
+
         // in der datenbank
-        println!("HALLO VON :id Hallo");
+        println!("hallo von: /courses/:id");
+        return response.send_text("HALLO WELT VON /courses mit");
     });
 
     app.listen(port, || {
