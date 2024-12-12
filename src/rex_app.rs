@@ -124,7 +124,6 @@ impl RexApp {
         for stream in listener.incoming() {
             match stream {
                 Ok(mut stream) => {
-                    // TODO: auskommentieren
                     let shared_self = std::sync::Arc::clone(&shared_self);
 
                     std::thread::spawn(move || {

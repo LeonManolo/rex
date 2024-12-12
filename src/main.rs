@@ -47,8 +47,8 @@ fn main() {
     let port = 8080;
 
     app.get("/users/:id", |request, response| {
-        let delay = time::Duration::from_secs(25);
-        thread::sleep(delay);
+        // let delay = time::Duration::from_secs(25);
+        // thread::sleep(delay);
 
 
         println!("Hallo von /users/:id");
