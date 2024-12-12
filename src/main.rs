@@ -93,6 +93,6 @@ fn main() {
 
     app.listen(port, || {
         //Hier kommen wir nie an!?
-        println!("Server started on Port: {}", 8080);
+        println!("Server successfully started!");
     });
 }
