@@ -119,7 +119,7 @@ impl RexApp {
 
         function();
 
-        //TODO: Implement Limit for number of threads
+        //TODO: Implement Limit for number of threads with threadpool framework
         let shared_self = std::sync::Arc::new(self);
 
         for stream in listener.incoming() {
